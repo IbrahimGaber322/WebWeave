@@ -1,8 +1,8 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL ;
+const SERVER_URL = process.env.REACT_APP_SERVER_URL ;
 
 
 
-export const socket = io(SOCKET_URL);
+export const socket = io(SERVER_URL);
 
