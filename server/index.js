@@ -52,7 +52,7 @@ app.use(cors());
 
 app.use('/posts', postRoutes);
 app.use('/user', userRoutes);
-const SERVER_PORT = process.env.SERVER_PORT;
+const SERVER_PORT = process.env.SERVER_PORT || 5000;
 const DATABASE_URL = process.env.DATABASE_URL;
 
 mongoose.connect(DATABASE_URL, {useNewUrlParser: true}).then(()=> app.listen(SERVER_PORT, ()=>console.log(`Server running on port: ${SERVER_PORT}`))).catch(((err)=>console.log(err)));
