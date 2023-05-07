@@ -41,7 +41,7 @@ export const signUp = async(req, res) => {
           from: EMAIL_USER,
           to: email,
           subject: 'Confirm your account',
-          html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="http://localhost:3000/confirmEmail/${token}">Confirm your account</a>`
+          html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="https://webweave.onrender.com/confirmEmail/${token}">Confirm your account</a>`
         };
         
         transporter.sendMail(mailOptions, function(error, info){
@@ -95,7 +95,7 @@ export const signIn = async(req, res) => {
               from: EMAIL_USER,
               to: email,
               subject: 'Confirm your account',
-              html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="http://localhost:3000/confirmEmail/${token}">Confirm your account</a>`
+              html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="https://webweave.onrender.com/confirmEmail/${token}">Confirm your account</a>`
             };
             
             transporter.sendMail(mailOptions, function(error, info){
@@ -280,7 +280,7 @@ export const forgotPassword = async(req, res) => {
         from: EMAIL_USER,
         to: email,
         subject: 'Reset your password',
-        html: `<p>Hi ${name}, Please click on the link below to reset your password:</p><a href="http://localhost:3000/resetpassword/${token}">Reset your password</a>`
+        html: `<p>Hi ${name}, Please click on the link below to reset your password:</p><a href="https://webweave.onrender.com/resetpassword/${token}">Reset your password</a>`
       };
       
       transporter.sendMail(mailOptions, function(error, info){

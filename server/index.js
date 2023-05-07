@@ -43,7 +43,6 @@ app.use('/user', userRoutes);
 io.on('connection', (socket) => {
   socket.on('signUser', (data) => {
     socket.join(data);
-    console.log(data);
   });
 });
 
