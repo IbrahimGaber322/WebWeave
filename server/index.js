@@ -11,7 +11,12 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const FRONTEND_URL = process.env.FRONTEND_URL;
+const io = new Server(server,{
+    cors: {
+      origin: FRONTEND_URL
+    }
+  });
 
 const limiter = rateLimit({
   windowMs: 60 * 1000,
@@ -20,8 +25,6 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 
-const FRONTEND_URL = process.env.FRONTEND_URL;
-const SOCKET_PORT = process.env.SOCKET_PORT;
 const SERVER_PORT = process.env.SERVER_PORT || 5000;
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -50,8 +53,6 @@ mongoose.connect(DATABASE_URL, { useNewUrlParser: true })
     server.listen(SERVER_PORT, () => {
       console.log(`Server listening on port ${SERVER_PORT}`);
     });
-    io.listen(SOCKET_PORT);
-    console.log(`Socket.IO listening on port ${SOCKET_PORT}`);
   })
   .catch((err) => console.log(err));
 
