@@ -46,6 +46,7 @@ const Post = ({ post }) => {
         title={post?.name}
         subheader={moment(post?.createdAt).fromNow()}
       />
+      {post.selectedFile&&
       <CardMedia
         component="img"
         loading="lazy"
@@ -53,6 +54,7 @@ const Post = ({ post }) => {
         sx={{maxHeight: 600}}
         title={post?.tags.map((tag) => ` #${tag}`)}
       />
+      }
       <CardContent>
         <Typography className="card-title" variant="h6" gutterBottom>
           {post?.title}
