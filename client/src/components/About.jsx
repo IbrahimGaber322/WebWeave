@@ -42,7 +42,7 @@ const About = () => {
      ...I'm a junior web developer. I built this social media website using the MERN stack and MUI. I'm always looking for ways to improve my skills and knowledge in web development, and I enjoy taking on new challenges.
           </Typography>
           <Typography gutterBottom mt={2}  textAlign={'center'}   variant="body1">
-        To know more about me you can visit my <LinkM>Portfolio</LinkM> or my <LinkM component={Link} to={'/profile/ibrahimseda322@gmail.com'}>Profile</LinkM>.
+        To know more about me you can visit my <LinkM component={Link} to={'https://ibrahimgaber.onrender.com/'}>Portfolio</LinkM> or my <LinkM component={Link} to={'/profile/ibrahimseda322@gmail.com'}>Profile</LinkM>.
           </Typography>
      </Grid>
      <Grid item position={"relative"} p={3}  xs={12} display={'flex'} justifyContent={'center'}>
