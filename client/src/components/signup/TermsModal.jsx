@@ -18,11 +18,10 @@ const style = {
   overflow:"auto"
 };
 
-export default function TermsModal({ setReadTerms, children }) {
+export default function TermsModal({ children }) {
   const [open, setOpen] = React.useState(false);
   const handleOpen = () => {
     setOpen(true);
-    setReadTerms(true);
   };
   const handleClose = () => setOpen(false);
 

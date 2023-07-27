@@ -70,7 +70,6 @@ const SignUp = () => {
   const [formData, setFormData] = useState(initialState);
   const [error, setError] = useState(initialErrorState);
   const [checked, setChecked] = useState(false);
-  const [readTerms, setReadTerms] = useState(false);
   const [showPassword, setShowPassword] = React.useState(false);
   const handleCheckBox = (event) => {
     setChecked(event.target.checked);
@@ -325,7 +324,6 @@ const SignUp = () => {
               <FormControlLabel
                 control={
                   <Checkbox
-                    disabled={!readTerms}
                     onChange={handleCheckBox}
                     checked={checked}
                   />
@@ -335,7 +333,7 @@ const SignUp = () => {
                     <Typography display={"flex"} alignItems={"center"}>
                       Accept
                     </Typography>
-                    <TermsModal setReadTerms={setReadTerms}>terms</TermsModal>
+                    <TermsModal>terms</TermsModal>
                   </Box>
                 }
               />
