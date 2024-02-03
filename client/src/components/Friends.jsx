@@ -22,7 +22,7 @@ import { addFriend, removeFriend } from "../actions/user";
 import AddCircleIcon from "@mui/icons-material/AddCircle";
 import { useNavigate } from "react-router-dom";
 import DeleteAlert from "./DeleteAlert";
-
+import Astro from "../images/_Pngtree_astronaut_spaceflight_5420858-removebg.png";
 export default function Friends() {
   const user = useSelector((state) => state.user);
   const navigate = useNavigate();
@@ -90,7 +90,7 @@ export default function Friends() {
                         component="img"
                         alt={user?.name.charAt(0)}
                         height="140"
-                        image={friend?.picture}
+                        image={friend?.picture || Astro}
                         sx={{ objectFit: "cover" }}
                       />
                       <CardContent>
@@ -111,10 +111,8 @@ export default function Friends() {
                     <CardActions
                       sx={{
                         display: "flex",
-                        justifyContent: "end",
-                        position: "absolute",
-                        bottom: 0,
-                        width: "100%",
+                        justifyContent: "center",
+                        width: "100%"     
                       }}
                     >
                       <DeleteAlert
@@ -122,7 +120,7 @@ export default function Friends() {
                         deleteCommand={"unfriend"}
                         friendName={friend.name}
                       >
-                        <Button color="error" size="small">
+                        <Button sx={{":hover":{bgcolor:"red", color:"white"}}} color="error" size="small">
                           Unfriend
                         </Button>
                       </DeleteAlert>
