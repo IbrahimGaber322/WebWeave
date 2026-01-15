@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import jwt_decode from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useDispatch } from "react-redux";
@@ -139,7 +139,7 @@ const SignUp = () => {
     setError({ ...error, [e.target.name]: false });
   };
   const googleSuccess = (res) => {
-    const googleData = jwt_decode(res?.credential);
+    const googleData = jwtDecode(res?.credential);
     setFormData({
       ...formData,
       firstName: googleData.given_name,

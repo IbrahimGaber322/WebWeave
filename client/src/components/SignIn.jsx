@@ -12,7 +12,7 @@ import Typography from "@mui/material/Typography";
 import { useDispatch } from "react-redux";
 import { signIn } from "../actions/user";
 import { useNavigate, Link } from "react-router-dom";
-import jwt_decode from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import {
   FormControl,
   IconButton,
@@ -54,7 +54,7 @@ export default function SignIn() {
     event.preventDefault();
   };
   const googleSuccess = (res) => {
-    const googleData = jwt_decode(res.credential);
+    const googleData = jwtDecode(res.credential);
     const googleUser = { email: googleData.email, google: true };
     dispatch(signIn(googleUser, navigate));
   };

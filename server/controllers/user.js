@@ -1,342 +1,676 @@
-import dotenv from 'dotenv';
-dotenv.config();
 import User from "../models/user.js";
 import TempUser from "../models/tempUser.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
-import { io} from '../index.js';
+import { io } from '../index.js';
+import logger from '../utils/logger.js';
 
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
+const JWT_SECRET = process.env.JWT_SECRET || 'test';
+const CLIENT_URL = process.env.CLIENT_URL || 'https://webweave.onrender.com';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASSWORD,
-  }
+    service: 'gmail',
+    auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASSWORD,
+    }
 });
 
-export const signUp = async(req, res) => {
-    
-    const user = req.body ;
-    try {  
-        const existingUser = await User.findOne({email:user.email});
-        if (existingUser) return res.status(400).json({message:"This email is already used."});
-        const hashedPassword = await bcrypt.hash(user.password, 12);
-        if(user.google){
-            const newUser = new User({...user, password:hashedPassword, confirmed:true});
-            await newUser.save();
-            const {name,email,picture,firstName,lastName} = newUser;
-            const token = jwt.sign({email:email}, 'test', {expiresIn: "24h"});
-            res.status(200).json({token,name,picture,email, firstName, lastName});
-        }else{
-        const newTempUser = new TempUser({...user, password:hashedPassword});
-        await newTempUser.save();
-        const {name,email,_id} = newTempUser;
-        const token = jwt.sign({_id:_id}, 'test', {expiresIn: "5min"});
-        
-        const mailOptions = {
-          from: EMAIL_USER,
-          to: email,
-          subject: 'Confirm your account',
-          html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="https://webweave.onrender.com/confirmEmail/${token}">Confirm your account</a>`
-        };
-        
-        transporter.sendMail(mailOptions, function(error, info){
-          if (error) {
-            console.log(error);
-          } else {
-            console.log('Email sent: ' + info.response);
-          }
-        });
-        
-        res.status(200).json({message: "need confirm"});
-    }
-    } catch (error) {
-        res.status(500).json("database error");
-    }
-}
-
-export const confirmEmail = async(req, res) => {
-    
-  const {token} = req.params;
-  try {
-    const decodedToken = jwt.verify(token, 'test');
-    const _id = decodedToken._id;
-    const tempUser = await TempUser.findOneAndUpdate({_id:_id},{confirmed:true},{new:true});
-    const newUser = new User({_id:tempUser._id, name:tempUser.name, firstName:tempUser.firstName, lastName:tempUser.lastName, password:tempUser.password, email:tempUser.email, picture:tempUser.picture, googleCred:tempUser.googleCred, confirmed:tempUser.confirmed});
-    await newUser.save();
-    if (newUser) {
-      const {name,picture,email, firstName, lastName,friends,requests,cover,about} = newUser;
-      const newToken = jwt.sign({email:email}, 'test', {expiresIn: "24h"});
-      res.status(200).json({token:newToken,name,picture,email, firstName, lastName,friends,requests,cover,about});
-    } else {
-      res.status(404).json("no account");
-    }
-  } catch (error) {
-    res.status(500).json("database error");
-  }
-}
-
-export const signIn = async(req, res) => {
-    
-    const user = req.body ;
+export const signUp = async (req, res) => {
+    const user = req.body;
 
     try {
-        const foundUser = await User.findOne({email:user.email});
-        if(!foundUser){
-            const tempUser = await TempUser.findOne({email:user.email});
-            if(tempUser){
-                const {name,email,_id} = tempUser;
-            const token = jwt.sign({_id:_id}, 'test', {expiresIn: "5min"});
-            const mailOptions = {
-              from: EMAIL_USER,
-              to: email,
-              subject: 'Confirm your account',
-              html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="https://webweave.onrender.com/confirmEmail/${token}">Confirm your account</a>`
-            };
-            
-            transporter.sendMail(mailOptions, function(error, info){
-              if (error) {
-                console.log(error);
-              } else {
-                console.log('Email sent: ' + info.response);
-              }
+        const existingUser = await User.findOne({ email: user.email });
+        if (existingUser) {
+            logger.warn('Sign up attempt with existing email', { email: user.email });
+            return res.status(400).json({
+                success: false,
+                message: "This email is already used."
             });
-             res.status(200).json({confirmed:false});
-        }else{
-            res.status(404).json({message: "User doesn't exist."});
         }
-        }else{
-            const {name,picture,email, firstName, lastName,friends,requests,cover,about} = foundUser;
-        if(!user.google){
-        const passwordValidate = await bcrypt.compare(user.password, foundUser.password);  
-        if(!passwordValidate) return res.status(400).json({message: "Password is incorrect."});
+
+        const hashedPassword = await bcrypt.hash(user.password, 12);
+
+        if (user.google) {
+            const newUser = new User({ ...user, password: hashedPassword, confirmed: true });
+            await newUser.save();
+            const { name, email, picture, firstName, lastName } = newUser;
+            const token = jwt.sign({ email: email }, JWT_SECRET, { expiresIn: "24h" });
+
+            logger.info('User signed up with Google', { email });
+            return res.status(200).json({
+                success: true,
+                token,
+                name,
+                picture,
+                email,
+                firstName,
+                lastName
+            });
         }
-        const token = jwt.sign({email:email}, 'test', {expiresIn: "24h"});
-         
-        res.status(200).json({token,name,picture,email, firstName, lastName, confirmed:true,friends,requests,cover,about});
-    }
+
+        const newTempUser = new TempUser({ ...user, password: hashedPassword });
+        await newTempUser.save();
+        const { name, email, _id } = newTempUser;
+        const token = jwt.sign({ _id: _id }, JWT_SECRET, { expiresIn: "5min" });
+
+        const mailOptions = {
+            from: EMAIL_USER,
+            to: email,
+            subject: 'Confirm your account',
+            html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="${CLIENT_URL}/confirmEmail/${token}">Confirm your account</a>`
+        };
+
+        transporter.sendMail(mailOptions, function (error, info) {
+            if (error) {
+                logger.error('Failed to send confirmation email', { email, error: error.message });
+            } else {
+                logger.info('Confirmation email sent', { email, response: info.response });
+            }
+        });
+
+        logger.info('User signed up, awaiting email confirmation', { email });
+        return res.status(200).json({
+            success: true,
+            message: "need confirm"
+        });
+
     } catch (error) {
-        console.log(error);
-        res.status(500).json("database error");
+        logger.error('Sign up error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred during sign up. Please try again."
+        });
     }
+};
 
-}
+export const confirmEmail = async (req, res) => {
+    const { token } = req.params;
 
-
-
-
-
-export const editProfile = async(req, res) => {
-    
-    const user = req.body ;
-    const {token, userEmail} = req;
-    
     try {
-        if(user?.email === userEmail){
-        const editedUser = await User.findOneAndUpdate({email:user.email}, user, {
-            new: true
-          });
-        
+        const decodedToken = jwt.verify(token, JWT_SECRET);
+        const _id = decodedToken._id;
 
-        
-        const {name,picture,email, firstName, lastName,friends,requests,cover,about} = editedUser;
-        res.status(200).json({token,name,picture,email, firstName, lastName,friends,requests,cover,about});
-        
-       }else{
-        res.json("Unauthinticated");
-       }
+        const tempUser = await TempUser.findOneAndUpdate(
+            { _id: _id },
+            { confirmed: true },
+            { new: true }
+        );
+
+        if (!tempUser) {
+            logger.warn('Email confirmation failed - temp user not found', { tokenId: _id });
+            return res.status(404).json({
+                success: false,
+                message: "Account not found or already confirmed"
+            });
+        }
+
+        const newUser = new User({
+            _id: tempUser._id,
+            name: tempUser.name,
+            firstName: tempUser.firstName,
+            lastName: tempUser.lastName,
+            password: tempUser.password,
+            email: tempUser.email,
+            picture: tempUser.picture,
+            googleCred: tempUser.googleCred,
+            confirmed: tempUser.confirmed
+        });
+
+        await newUser.save();
+        await TempUser.findByIdAndDelete(_id);
+
+        const { name, picture, email, firstName, lastName, friends, requests, cover, about } = newUser;
+        const newToken = jwt.sign({ email: email }, JWT_SECRET, { expiresIn: "24h" });
+
+        logger.info('Email confirmed successfully', { email });
+        return res.status(200).json({
+            success: true,
+            token: newToken,
+            name,
+            picture,
+            email,
+            firstName,
+            lastName,
+            friends,
+            requests,
+            cover,
+            about
+        });
+
     } catch (error) {
-        res.status(500).json("database error");
+        if (error.name === 'TokenExpiredError') {
+            logger.warn('Email confirmation token expired');
+            return res.status(400).json({
+                success: false,
+                message: "Confirmation link has expired. Please sign up again."
+            });
+        }
+        if (error.name === 'JsonWebTokenError') {
+            logger.warn('Invalid email confirmation token');
+            return res.status(400).json({
+                success: false,
+                message: "Invalid confirmation link."
+            });
+        }
+        logger.error('Email confirmation error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred during email confirmation."
+        });
     }
-}
+};
 
-export const addFriend = async(req, res) => {
-    
-    const {friendEmail} = req.body ;
-    const {userEmail,token} = req;
-    
+export const signIn = async (req, res) => {
+    const user = req.body;
+
     try {
-        
-        const user = await User.findOne({email:userEmail});
-        const friend = await User.findOne({email:friendEmail});
-        
-    if(user&&friend){
-        if(user.friends.some(f => f.email ===friendEmail)){
-            res.status(200).json("friend already exists");
-            
-        }else{
-            
-            if(user.requests.some(r=> r.email === friendEmail)){
-              
-            user.friends.push({name:friend.name, email:friend.email, picture:friend.picture});
-            const index = user.requests.findIndex(r=>r.email===friendEmail);
-            
-            user.requests.splice(index, 1);
-            const updatedUser = await User.findOneAndUpdate({email:userEmail}, {...user,friends:user.friends,requests:user.requests}, {
-                new: true
-              });
-              const {name,picture,email, firstName, lastName,friends,requests,cover,about} = updatedUser;
-              res.status(200).json({token,name,picture,email, firstName, lastName,friends,requests,cover,about});
-              friend.friends.push({name:name, email:email, picture:picture});
-              const updatedFriend = await User.findOneAndUpdate({email:friendEmail}, {...friend,friends:friend.friends},{new:true});
-              io.to(friendEmail).emit("user",{friends:updatedFriend.friends, requests:updatedFriend.requests});
-            }else{
-                if(friend.requests.some(r=> r.email=== userEmail)){
-                   res.status(409).json("request already sent");
-                }else{
-                  
-                     friend.requests.push({name:user.name, email:user.email, picture:user.picture});
-                    const updatedFriend = await User.findOneAndUpdate({email:friendEmail}, {...friend,requests:friend.requests},{new:true});
-                    io.to(friendEmail).emit("user",{friends:updatedFriend.friends, requests:updatedFriend.requests});
-                }
+        const foundUser = await User.findOne({ email: user.email });
+
+        if (!foundUser) {
+            const tempUser = await TempUser.findOne({ email: user.email });
+
+            if (tempUser) {
+                const { name, email, _id } = tempUser;
+                const token = jwt.sign({ _id: _id }, JWT_SECRET, { expiresIn: "5min" });
+
+                const mailOptions = {
+                    from: EMAIL_USER,
+                    to: email,
+                    subject: 'Confirm your account',
+                    html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="${CLIENT_URL}/confirmEmail/${token}">Confirm your account</a>`
+                };
+
+                transporter.sendMail(mailOptions, function (error, info) {
+                    if (error) {
+                        logger.error('Failed to resend confirmation email', { email, error: error.message });
+                    } else {
+                        logger.info('Confirmation email resent', { email });
+                    }
+                });
+
+                return res.status(200).json({
+                    success: true,
+                    confirmed: false,
+                    message: "Please check your email to confirm your account."
+                });
+            }
+
+            logger.warn('Sign in attempt with non-existent email', { email: user.email });
+            return res.status(404).json({
+                success: false,
+                message: "User doesn't exist."
+            });
+        }
+
+        const { name, picture, email, firstName, lastName, friends, requests, cover, about } = foundUser;
+
+        if (!user.google) {
+            const passwordValidate = await bcrypt.compare(user.password, foundUser.password);
+            if (!passwordValidate) {
+                logger.warn('Sign in attempt with incorrect password', { email: user.email });
+                return res.status(400).json({
+                    success: false,
+                    message: "Password is incorrect."
+                });
             }
         }
-    }
-    else {
-        res.status(404).json("database error");
-    }
-    } catch (error) {
-        res.status(500).json("database error");
-    }
-}
 
-export const removeFriend = async(req, res) => {
-    
-    const {friendEmail} = req.body ;
-    const {userEmail, token} = req;
+        const token = jwt.sign({ email: email }, JWT_SECRET, { expiresIn: "24h" });
+
+        logger.info('User signed in successfully', { email });
+        return res.status(200).json({
+            success: true,
+            token,
+            name,
+            picture,
+            email,
+            firstName,
+            lastName,
+            confirmed: true,
+            friends,
+            requests,
+            cover,
+            about
+        });
+
+    } catch (error) {
+        logger.error('Sign in error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred during sign in. Please try again."
+        });
+    }
+};
+
+export const editProfile = async (req, res) => {
+    const user = req.body;
+    const { token, userEmail } = req;
+
     try {
-        const friend = await User.findOne({email:friendEmail});
-        const user = await User.findOne({email:userEmail});
-    if(user){
-       
-   
-        if(!user.friends.some(friend=>friend.email === friendEmail)){
-          if(!user.requests.some(r=>r.email === friendEmail)){
-            res.status(200).json("friend already removed");
-          }else{
-            const index = user.requests.findIndex(r=> r.email === friendEmail);
-            user.requests.splice(index, 1);
-            const updatedUser = await User.findOneAndUpdate({email:user.email}, {...user, requests:user.requests}, {
-                new: true
-              });
-              const {name,picture,email, firstName, lastName, requests,friends,cover,about} = updatedUser;
-              res.status(200).json({token,name,picture,email, firstName, lastName,friends,requests,cover,about});
-          }
-        }else{
-            const userIndex = user.friends.findIndex(f=>f.email===friendEmail);
-            const friendIndex = friend.friends.findIndex(f=>f.email===userEmail);
-            user.friends.splice(userIndex, 1);
-            friend.friends.splice(friendIndex, 1);
-            const updatedUser = await User.findOneAndUpdate({email:userEmail}, {...user, friends:user.friends}, {
-                new: true
-              });
-              const {name,picture,email, firstName, lastName, requests,friends,cover,about} = updatedUser;
-              res.status(200).json({token,name,picture,email, firstName, lastName,friends,requests,cover,about});
-              const updatedFriend = await User.findOneAndUpdate({email:friendEmail}, {...friend,friends:friend.friends}, {
-                new: true
-              });
-              io.to(friendEmail).emit("user",{friends:updatedFriend.friends, requests:updatedFriend.requests});
+        if (user?.email !== userEmail) {
+            logger.warn('Unauthorized profile edit attempt', { userEmail, targetEmail: user?.email });
+            return res.status(403).json({
+                success: false,
+                message: "You are not authorized to edit this profile."
+            });
         }
-    }
-    else {
-        res.status(404).json("database error");
-    }
+
+        const editedUser = await User.findOneAndUpdate(
+            { email: user.email },
+            user,
+            { new: true }
+        );
+
+        if (!editedUser) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const { name, picture, email, firstName, lastName, friends, requests, cover, about } = editedUser;
+
+        logger.info('Profile updated successfully', { email });
+        return res.status(200).json({
+            success: true,
+            token,
+            name,
+            picture,
+            email,
+            firstName,
+            lastName,
+            friends,
+            requests,
+            cover,
+            about
+        });
+
     } catch (error) {
-        res.status(500).json("database error");
+        logger.error('Edit profile error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while updating profile."
+        });
     }
-}
+};
 
-export const getOtherUser = async(req,res) =>{
-  
-  const {otherUserEmail} = req.params;
-  try {
-    const otherUser = await User.findOne({email:otherUserEmail});
-    if(otherUser){
-      const {name,picture,email, firstName, lastName, requests,friends,cover,about} = otherUser;
-    res.status(200).json({name,picture,email, firstName, lastName, requests,friends,cover,about});
-    }else{
-      res.status(404).json("no user");
+export const addFriend = async (req, res) => {
+    const { email: friendEmail } = req.body;
+    const { userEmail, token } = req;
+
+    try {
+        const user = await User.findOne({ email: userEmail });
+        const friend = await User.findOne({ email: friendEmail });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        if (!friend) {
+            logger.warn('Add friend attempt - friend not found', { userEmail, friendEmail });
+            return res.status(404).json({
+                success: false,
+                message: "User with this email not found."
+            });
+        }
+
+        if (userEmail === friendEmail) {
+            return res.status(400).json({
+                success: false,
+                message: "You cannot add yourself as a friend."
+            });
+        }
+
+        if (user.friends.some(f => f.email === friendEmail)) {
+            return res.status(200).json({
+                success: true,
+                message: "Already friends."
+            });
+        }
+
+        if (user.requests.some(r => r.email === friendEmail)) {
+            user.friends.push({ name: friend.name, email: friend.email, picture: friend.picture });
+            const index = user.requests.findIndex(r => r.email === friendEmail);
+            user.requests.splice(index, 1);
+
+            const updatedUser = await User.findOneAndUpdate(
+                { email: userEmail },
+                { friends: user.friends, requests: user.requests },
+                { new: true }
+            );
+
+            const { name, picture, email, firstName, lastName, friends, requests, cover, about } = updatedUser;
+
+            friend.friends.push({ name: name, email: email, picture: picture });
+            const updatedFriend = await User.findOneAndUpdate(
+                { email: friendEmail },
+                { friends: friend.friends },
+                { new: true }
+            );
+
+            io.to(friendEmail).emit("user", { friends: updatedFriend.friends, requests: updatedFriend.requests });
+
+            logger.info('Friend request accepted', { userEmail, friendEmail });
+            return res.status(200).json({
+                success: true,
+                token,
+                name,
+                picture,
+                email,
+                firstName,
+                lastName,
+                friends,
+                requests,
+                cover,
+                about
+            });
+        }
+
+        if (friend.requests.some(r => r.email === userEmail)) {
+            return res.status(409).json({
+                success: false,
+                message: "Friend request already sent."
+            });
+        }
+
+        friend.requests.push({ name: user.name, email: user.email, picture: user.picture });
+        const updatedFriend = await User.findOneAndUpdate(
+            { email: friendEmail },
+            { requests: friend.requests },
+            { new: true }
+        );
+
+        io.to(friendEmail).emit("user", { friends: updatedFriend.friends, requests: updatedFriend.requests });
+
+        logger.info('Friend request sent', { userEmail, friendEmail });
+        return res.status(200).json({
+            success: true,
+            message: "Friend request sent."
+        });
+
+    } catch (error) {
+        logger.error('Add friend error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while adding friend."
+        });
     }
-  } catch (error) {
-    console.log(error);
-  }
-}
+};
 
-export const forgotPassword = async(req, res) => {
-  
-  const {userEmail} = req.body ;
-  
-  try {  
-      const user = await User.findOne({email:userEmail});
-      if (!user) return res.status(400).json({message:"no user with this email"});
-      const {name,email,_id} = user;
-      const token = jwt.sign({_id:_id}, 'test', {expiresIn: "5min"});
-      
-      const mailOptions = {
-        from: EMAIL_USER,
-        to: email,
-        subject: 'Reset your password',
-        html: `<p>Hi ${name}, Please click on the link below to reset your password:</p><a href="https://webweave.onrender.com/resetpassword/${token}">Reset your password</a>`
-      };
-      
-      transporter.sendMail(mailOptions, function(error, info){
-        if (error) {
-          console.log(error);
-        } else {
-          console.log('Email sent: ' + info.response);
+export const removeFriend = async (req, res) => {
+    const { email: friendEmail } = req.body;
+    const { userEmail, token } = req;
+
+    try {
+        const friend = await User.findOne({ email: friendEmail });
+        const user = await User.findOne({ email: userEmail });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
         }
-      });
-      
-      res.status(200).json({message: "success"});
-  
-  } catch (error) {
-      res.status(500).json("database error");
-  }
-}
 
-export const resetPassword = async(req, res) => {
-  
-const {password,token} = req.body;
+        const isFriend = user.friends.some(f => f.email === friendEmail);
+        const hasRequest = user.requests.some(r => r.email === friendEmail);
 
-try {
-  const decodedToken = jwt.verify(token, 'test');
-  const _id = decodedToken._id;
-  const user = await User.findById(_id);
-  
-  const hashedPassword = await bcrypt.hash(password, 12);
-  await User.findByIdAndUpdate(_id, {password:hashedPassword});
-  res.status(200).json({message:"success"})
-} catch (error) {
-  res.status(500).json("database error");
-}
-}
-
-export const feedback = async(req, res) => {
-  
-  const {name, email, message} = req.body ;
-  try {  
-      const mailOptions = {
-        from: EMAIL_USER,
-        to: EMAIL_USER,
-        subject: 'Feed back',
-        html: `<p>name: ${name}</p><p>email: ${email}</p><p>message: ${message}</p>`
-      };
-      
-      transporter.sendMail(mailOptions, function(error, info){
-        if (error) {
-          console.log(error);
-        } else {
-          console.log('Email sent: ' + info.response);
+        if (!isFriend && !hasRequest) {
+            return res.status(200).json({
+                success: true,
+                message: "Already removed."
+            });
         }
-      });
-      
-      res.status(200).json("success");
 
-  } catch (error) {
-      res.status(500).json("database error");
-  }
-}
+        if (hasRequest && !isFriend) {
+            const index = user.requests.findIndex(r => r.email === friendEmail);
+            user.requests.splice(index, 1);
+
+            const updatedUser = await User.findOneAndUpdate(
+                { email: userEmail },
+                { requests: user.requests },
+                { new: true }
+            );
+
+            const { name, picture, email, firstName, lastName, requests, friends, cover, about } = updatedUser;
+
+            logger.info('Friend request declined', { userEmail, friendEmail });
+            return res.status(200).json({
+                success: true,
+                token,
+                name,
+                picture,
+                email,
+                firstName,
+                lastName,
+                friends,
+                requests,
+                cover,
+                about
+            });
+        }
+
+        if (isFriend && friend) {
+            const userIndex = user.friends.findIndex(f => f.email === friendEmail);
+            const friendIndex = friend.friends.findIndex(f => f.email === userEmail);
+
+            user.friends.splice(userIndex, 1);
+            if (friendIndex !== -1) {
+                friend.friends.splice(friendIndex, 1);
+            }
+
+            const updatedUser = await User.findOneAndUpdate(
+                { email: userEmail },
+                { friends: user.friends },
+                { new: true }
+            );
+
+            const { name, picture, email, firstName, lastName, requests, friends, cover, about } = updatedUser;
+
+            if (friend) {
+                const updatedFriend = await User.findOneAndUpdate(
+                    { email: friendEmail },
+                    { friends: friend.friends },
+                    { new: true }
+                );
+                io.to(friendEmail).emit("user", { friends: updatedFriend.friends, requests: updatedFriend.requests });
+            }
+
+            logger.info('Friend removed', { userEmail, friendEmail });
+            return res.status(200).json({
+                success: true,
+                token,
+                name,
+                picture,
+                email,
+                firstName,
+                lastName,
+                friends,
+                requests,
+                cover,
+                about
+            });
+        }
+
+    } catch (error) {
+        logger.error('Remove friend error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while removing friend."
+        });
+    }
+};
+
+export const getOtherUser = async (req, res) => {
+    const { otherUserEmail } = req.params;
+
+    try {
+        const otherUser = await User.findOne({ email: otherUserEmail });
+
+        if (!otherUser) {
+            logger.warn('Get other user - user not found', { email: otherUserEmail });
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const { name, picture, email, firstName, lastName, requests, friends, cover, about } = otherUser;
+
+        return res.status(200).json({
+            success: true,
+            name,
+            picture,
+            email,
+            firstName,
+            lastName,
+            requests,
+            friends,
+            cover,
+            about
+        });
+
+    } catch (error) {
+        logger.error('Get other user error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while fetching user data."
+        });
+    }
+};
+
+export const forgotPassword = async (req, res) => {
+    const { email: userEmail } = req.body;
+
+    try {
+        const user = await User.findOne({ email: userEmail });
+
+        if (!user) {
+            logger.warn('Forgot password - user not found', { email: userEmail });
+            return res.status(404).json({
+                success: false,
+                message: "No user found with this email."
+            });
+        }
+
+        const { name, email, _id } = user;
+        const token = jwt.sign({ _id: _id }, JWT_SECRET, { expiresIn: "5min" });
+
+        const mailOptions = {
+            from: EMAIL_USER,
+            to: email,
+            subject: 'Reset your password',
+            html: `<p>Hi ${name}, Please click on the link below to reset your password:</p><a href="${CLIENT_URL}/resetpassword/${token}">Reset your password</a>`
+        };
+
+        transporter.sendMail(mailOptions, function (error, info) {
+            if (error) {
+                logger.error('Failed to send password reset email', { email, error: error.message });
+            } else {
+                logger.info('Password reset email sent', { email });
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Password reset link sent to your email."
+        });
+
+    } catch (error) {
+        logger.error('Forgot password error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred. Please try again."
+        });
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    const { password, token } = req.body;
+
+    try {
+        const decodedToken = jwt.verify(token, JWT_SECRET);
+        const _id = decodedToken._id;
+
+        const user = await User.findById(_id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 12);
+        await User.findByIdAndUpdate(_id, { password: hashedPassword });
+
+        logger.info('Password reset successfully', { userId: _id });
+        return res.status(200).json({
+            success: true,
+            message: "Password reset successfully."
+        });
+
+    } catch (error) {
+        if (error.name === 'TokenExpiredError') {
+            logger.warn('Password reset token expired');
+            return res.status(400).json({
+                success: false,
+                message: "Reset link has expired. Please request a new one."
+            });
+        }
+        if (error.name === 'JsonWebTokenError') {
+            logger.warn('Invalid password reset token');
+            return res.status(400).json({
+                success: false,
+                message: "Invalid reset link."
+            });
+        }
+        logger.error('Reset password error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while resetting password."
+        });
+    }
+};
+
+export const feedback = async (req, res) => {
+    const { name, email, message } = req.body;
+
+    try {
+        const mailOptions = {
+            from: EMAIL_USER,
+            to: EMAIL_USER,
+            subject: 'Feedback from WebWeave',
+            html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email}</p><p><strong>Message:</strong> ${message}</p>`
+        };
+
+        transporter.sendMail(mailOptions, function (error, info) {
+            if (error) {
+                logger.error('Failed to send feedback email', { error: error.message });
+                return res.status(500).json({
+                    success: false,
+                    message: "Failed to send feedback. Please try again."
+                });
+            } else {
+                logger.info('Feedback email sent', { fromEmail: email });
+                return res.status(200).json({
+                    success: true,
+                    message: "Feedback sent successfully."
+                });
+            }
+        });
+
+    } catch (error) {
+        logger.error('Feedback error', { error: error.message, stack: error.stack });
+        return res.status(500).json({
+            success: false,
+            message: "An error occurred while sending feedback."
+        });
+    }
+};

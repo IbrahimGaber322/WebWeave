@@ -1,6 +1,6 @@
     import React, {  useState } from "react";
     import { Grid, Button, Grow, TextField,Box } from "@mui/material";
-    import ClickAwayListener from "@mui/base/ClickAwayListener";
+    import { ClickAwayListener } from "@mui/base";
     import { useNavigate } from "react-router-dom";
     import SearchIcon from "@mui/icons-material/Search";
     import TagIcon from '@mui/icons-material/Tag';
