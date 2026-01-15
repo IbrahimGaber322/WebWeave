@@ -15,3 +15,19 @@ export const LIKE_COMMENT = "LIKE_COMMENT";
 export const LIKE_REPLY = "LIKE_REPLY";
 export const REFRESH_USER= "REFRESH_USER";
 export const GET_OTHER_USER= "GET_OTHER_USER";
+
+// Chat action types
+export const FETCH_CONVERSATIONS = "FETCH_CONVERSATIONS";
+export const SET_ACTIVE_CONVERSATION = "SET_ACTIVE_CONVERSATION";
+export const FETCH_MESSAGES = "FETCH_MESSAGES";
+export const FETCH_MORE_MESSAGES = "FETCH_MORE_MESSAGES";
+export const SEND_MESSAGE = "SEND_MESSAGE";
+export const RECEIVE_MESSAGE = "RECEIVE_MESSAGE";
+export const MARK_AS_READ = "MARK_AS_READ";
+export const SET_UNREAD_COUNT = "SET_UNREAD_COUNT";
+export const SET_TYPING = "SET_TYPING";
+export const CLEAR_TYPING = "CLEAR_TYPING";
+export const SET_ONLINE_STATUS = "SET_ONLINE_STATUS";
+export const CHAT_LOADING = "CHAT_LOADING";
+export const CHAT_ERROR = "CHAT_ERROR";
+export const CLEAR_CHAT = "CLEAR_CHAT";

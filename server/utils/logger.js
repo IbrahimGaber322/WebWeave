@@ -32,9 +32,12 @@ winston.addColors(colors);
 const format = winston.format.combine(
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
     winston.format.colorize({ all: true }),
-    winston.format.printf(
-        (info) => `${info.timestamp} ${info.level}: ${info.message}${info.meta ? ' ' + JSON.stringify(info.meta) : ''}`
-    )
+    winston.format.printf((info) => {
+        // Extract metadata (everything except timestamp, level, message)
+        const { timestamp, level, message, ...meta } = info;
+        const metaStr = Object.keys(meta).length ? ' ' + JSON.stringify(meta) : '';
+        return `${timestamp} ${level}: ${message}${metaStr}`;
+    })
 );
 
 const fileFormat = winston.format.combine(

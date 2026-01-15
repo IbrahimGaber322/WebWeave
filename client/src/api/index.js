@@ -40,3 +40,13 @@ export const removeFriend = (friendEmail) => API.post('/user/removeFriend', frie
 export const forgotPassword = (userEmail) => API.post('user/forgotPassword', userEmail);
 export const resetPassword = (userData) => API.post('user/resetPassword', userData);
 export const feedback = (feedback) => API.post('user/feedback', feedback);
+
+// Chat API
+export const getConversations = () => API.get('/chat/conversations');
+export const getOrCreateConversation = (friendEmail) => API.get(`/chat/conversation/${friendEmail}`);
+export const getMessages = (conversationId, page = 1, limit = 30) =>
+    API.get(`/chat/messages/${conversationId}?page=${page}&limit=${limit}`);
+export const sendMessage = (conversationId, content) =>
+    API.post('/chat/message', { conversationId, content });
+export const markAsRead = (conversationId) => API.patch(`/chat/read/${conversationId}`);
+export const getUnreadCount = () => API.get('/chat/unread-count');

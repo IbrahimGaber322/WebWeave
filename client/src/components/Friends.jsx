@@ -45,14 +45,6 @@ export default function Friends() {
     setEmail("");
   };
 
-  const handleKeyDown = (e) => {
-    if (e.keyCode === 13) {
-      if (email !== user.email) {
-        dispatch(addFriend({ friendEmail: email }));
-      }
-      setEmail("");
-    }
-  };
   const openProfile = (otherUserEmail) => {
     navigate(`/profile/${otherUserEmail}`);
   };
@@ -149,7 +141,6 @@ export default function Friends() {
                   name="email"
                   value={email}
                   onChange={handleChange}
-                  onKeyDown={handleKeyDown}
                   endAdornment={
                     <InputAdornment position="end">
                       <IconButton type="submit" edge="end">

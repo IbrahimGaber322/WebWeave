@@ -6,18 +6,56 @@ import nodemailer from "nodemailer";
 import { io } from '../index.js';
 import logger from '../utils/logger.js';
 
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
 const JWT_SECRET = process.env.JWT_SECRET || 'test';
 const CLIENT_URL = process.env.CLIENT_URL || 'https://webweave.onrender.com';
 
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASSWORD,
+// Helper to get email user (lazy load to ensure env vars are available)
+const getEmailUser = () => process.env.EMAIL_USER;
+
+// Create transporter lazily to ensure env vars are loaded
+let transporter = null;
+let transporterVerified = false;
+
+const getTransporter = () => {
+    if (!transporter) {
+        const EMAIL_USER = process.env.EMAIL_USER;
+        const EMAIL_PASSWORD = process.env.EMAIL_PASSWORD;
+
+        logger.info('Initializing email transporter', {
+            hasEmailUser: !!EMAIL_USER,
+            hasEmailPassword: !!EMAIL_PASSWORD,
+            emailUserValue: EMAIL_USER ? EMAIL_USER.substring(0, 5) + '***' : 'undefined'
+        });
+
+        if (!EMAIL_USER || !EMAIL_PASSWORD) {
+            logger.error('Email credentials missing', { EMAIL_USER: !!EMAIL_USER, EMAIL_PASSWORD: !!EMAIL_PASSWORD });
+        }
+
+        transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: EMAIL_USER,
+                pass: EMAIL_PASSWORD,
+            }
+        });
+
+        // Verify transporter on first creation
+        if (!transporterVerified) {
+            transporter.verify((error, success) => {
+                if (error) {
+                    logger.error('Email transporter verification failed', {
+                        error: error.message,
+                        code: error.code
+                    });
+                } else {
+                    logger.info('Email transporter verified successfully');
+                    transporterVerified = true;
+                }
+            });
+        }
     }
-});
+    return transporter;
+};
 
 export const signUp = async (req, res) => {
     const user = req.body;
@@ -58,17 +96,35 @@ export const signUp = async (req, res) => {
         const token = jwt.sign({ _id: _id }, JWT_SECRET, { expiresIn: "5min" });
 
         const mailOptions = {
-            from: EMAIL_USER,
+            from: getEmailUser(),
             to: email,
             subject: 'Confirm your account',
             html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="${CLIENT_URL}/confirmEmail/${token}">Confirm your account</a>`
         };
 
-        transporter.sendMail(mailOptions, function (error, info) {
+        logger.info('Attempting to send confirmation email (signup)', {
+            to: email,
+            from: getEmailUser(),
+            subject: 'Confirm your account'
+        });
+
+        getTransporter().sendMail(mailOptions, function (error, info) {
             if (error) {
-                logger.error('Failed to send confirmation email', { email, error: error.message });
+                logger.error('Failed to send confirmation email', {
+                    email,
+                    error: error.message,
+                    code: error.code,
+                    command: error.command,
+                    responseCode: error.responseCode
+                });
             } else {
-                logger.info('Confirmation email sent', { email, response: info.response });
+                logger.info('Confirmation email sent successfully (signup)', {
+                    email,
+                    response: info.response,
+                    messageId: info.messageId,
+                    accepted: info.accepted,
+                    rejected: info.rejected
+                });
             }
         });
 
@@ -178,17 +234,36 @@ export const signIn = async (req, res) => {
                 const token = jwt.sign({ _id: _id }, JWT_SECRET, { expiresIn: "5min" });
 
                 const mailOptions = {
-                    from: EMAIL_USER,
+                    from: getEmailUser(),
                     to: email,
                     subject: 'Confirm your account',
                     html: `<p>Hi ${name},</p><p>Thank you for signing up to our service. Please click on the link below to confirm your account:</p><a href="${CLIENT_URL}/confirmEmail/${token}">Confirm your account</a>`
                 };
 
-                transporter.sendMail(mailOptions, function (error, info) {
+                logger.info('Attempting to send confirmation email', {
+                    to: email,
+                    from: getEmailUser(),
+                    subject: 'Confirm your account'
+                });
+
+                getTransporter().sendMail(mailOptions, function (error, info) {
                     if (error) {
-                        logger.error('Failed to resend confirmation email', { email, error: error.message });
+                        console.error('Email send error:', error);
+                        logger.error('Failed to resend confirmation email', {
+                            email,
+                            error: error.message,
+                            code: error.code,
+                            command: error.command,
+                            responseCode: error.responseCode
+                        });
                     } else {
-                        logger.info('Confirmation email resent', { email });
+                        logger.info('Confirmation email sent successfully', {
+                            email,
+                            response: info.response,
+                            messageId: info.messageId,
+                            accepted: info.accepted,
+                            rejected: info.rejected
+                        });
                     }
                 });
 
@@ -299,7 +374,7 @@ export const editProfile = async (req, res) => {
 };
 
 export const addFriend = async (req, res) => {
-    const { email: friendEmail } = req.body;
+    const { friendEmail } = req.body;
     const { userEmail, token } = req;
 
     try {
@@ -387,6 +462,15 @@ export const addFriend = async (req, res) => {
             { new: true }
         );
 
+        // Debug: Check if friend is in a socket room
+        const roomSockets = io.sockets.adapter.rooms.get(friendEmail);
+        logger.info('Emitting friend request notification', {
+            to: friendEmail,
+            roomExists: !!roomSockets,
+            socketsInRoom: roomSockets?.size || 0,
+            requestsCount: updatedFriend.requests?.length
+        });
+
         io.to(friendEmail).emit("user", { friends: updatedFriend.friends, requests: updatedFriend.requests });
 
         logger.info('Friend request sent', { userEmail, friendEmail });
@@ -405,7 +489,7 @@ export const addFriend = async (req, res) => {
 };
 
 export const removeFriend = async (req, res) => {
-    const { email: friendEmail } = req.body;
+    const { friendEmail } = req.body;
     const { userEmail, token } = req;
 
     try {
@@ -564,13 +648,13 @@ export const forgotPassword = async (req, res) => {
         const token = jwt.sign({ _id: _id }, JWT_SECRET, { expiresIn: "5min" });
 
         const mailOptions = {
-            from: EMAIL_USER,
+            from: getEmailUser(),
             to: email,
             subject: 'Reset your password',
             html: `<p>Hi ${name}, Please click on the link below to reset your password:</p><a href="${CLIENT_URL}/resetpassword/${token}">Reset your password</a>`
         };
 
-        transporter.sendMail(mailOptions, function (error, info) {
+        getTransporter().sendMail(mailOptions, function (error, info) {
             if (error) {
                 logger.error('Failed to send password reset email', { email, error: error.message });
             } else {
@@ -644,13 +728,13 @@ export const feedback = async (req, res) => {
 
     try {
         const mailOptions = {
-            from: EMAIL_USER,
-            to: EMAIL_USER,
+            from: getEmailUser(),
+            to: getEmailUser(),
             subject: 'Feedback from WebWeave',
             html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email}</p><p><strong>Message:</strong> ${message}</p>`
         };
 
-        transporter.sendMail(mailOptions, function (error, info) {
+        getTransporter().sendMail(mailOptions, function (error, info) {
             if (error) {
                 logger.error('Failed to send feedback email', { error: error.message });
                 return res.status(500).json({

@@ -59,8 +59,10 @@ app.use(bodyParser.urlencoded({ limit: '30mb', extended: true }));
 // Routes
 import userRoutes from './routes/user.js';
 import postRoutes from './routes/posts.js';
+import chatRoutes from './routes/chat.js';
 app.use('/posts', postRoutes);
 app.use('/user', userRoutes);
+app.use('/chat', chatRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -71,17 +73,67 @@ app.get('/health', (req, res) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// Socket.IO
+// Socket.IO - Track online users: Map<email, Set<socketId>>
+const onlineUsers = new Map();
+
 io.on('connection', (socket) => {
     logger.info('New socket connection', { socketId: socket.id });
 
-    socket.on('signUser', (data) => {
-        socket.join(data);
-        logger.debug('User joined room', { room: data, socketId: socket.id });
+    socket.on('signUser', (email) => {
+        if (!email) {
+            logger.warn('signUser called with empty email', { socketId: socket.id });
+            return;
+        }
+
+        socket.join(email);
+
+        // Track online status
+        if (!onlineUsers.has(email)) {
+            onlineUsers.set(email, new Set());
+        }
+        onlineUsers.get(email).add(socket.id);
+
+        // Store email on socket for disconnect cleanup
+        socket.userEmail = email;
+
+        // Broadcast online status to all connected users
+        socket.broadcast.emit('userOnline', { email });
+
+        logger.info('User joined socket room', { email, socketId: socket.id, totalSockets: onlineUsers.get(email).size });
+    });
+
+    // Chat: Typing indicator
+    socket.on('typing', ({ conversationId, recipientEmail }) => {
+        io.to(recipientEmail).emit('userTyping', { conversationId });
+    });
+
+    socket.on('stopTyping', ({ conversationId, recipientEmail }) => {
+        io.to(recipientEmail).emit('userStopTyping', { conversationId });
+    });
+
+    // Check if users are online (with callback)
+    socket.on('checkOnline', (emails, callback) => {
+        const onlineStatuses = {};
+        emails.forEach(email => {
+            onlineStatuses[email] = onlineUsers.has(email) && onlineUsers.get(email).size > 0;
+        });
+        if (typeof callback === 'function') {
+            callback(onlineStatuses);
+        }
     });
 
     socket.on('disconnect', () => {
-        logger.debug('Socket disconnected', { socketId: socket.id });
+        // Remove from online tracking
+        const email = socket.userEmail;
+        if (email && onlineUsers.has(email)) {
+            onlineUsers.get(email).delete(socket.id);
+            if (onlineUsers.get(email).size === 0) {
+                onlineUsers.delete(email);
+                // Broadcast offline status
+                socket.broadcast.emit('userOffline', { email });
+            }
+        }
+        logger.debug('Socket disconnected', { socketId: socket.id, email });
     });
 });
 

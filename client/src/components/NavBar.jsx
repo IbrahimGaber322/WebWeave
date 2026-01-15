@@ -17,13 +17,16 @@ import {
   Container
 } from "@mui/material";
 import { refreshUser, signOut } from "../actions/user";
+import { fetchUnreadCount, receiveMessage, fetchConversations, setOnlineStatus } from "../actions/chat";
 import MenuIcon from "@mui/icons-material/Menu";
 import MaterialUISwitch from "./DarkModeSwitch";
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import ChatIcon from '@mui/icons-material/Chat';
 import Diversity3Icon from '@mui/icons-material/Diversity3';
 import ArticleIcon from '@mui/icons-material/Article';
 import QuestionMarkIcon from '@mui/icons-material/QuestionMark';
 import { socket } from "../socket";
+import ChatDrawer from "./chat/ChatDrawer";
 
 const pages = ["Create Post", "Friends", "About"];
 const settings = ["Profile","Sign Out"];
@@ -33,17 +36,57 @@ function NavBar({setDark, dark}) {
   const dispatch = useDispatch();
   const medium = useMediaQuery('(max-width:900px)')
   const user = useSelector((state)=>state.user);
+  const { totalUnreadCount } = useSelector((state) => state.chat);
   const [anchorElNav, setAnchorElNav] = useState(null);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [anchorElNot, setAnchorElNot] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+
   useEffect(() => {
-    socket.emit("signUser", user?.email);
-  }, [user?.email,dispatch]);
-  
-  socket.on('user', (data)=>{
-    dispatch(refreshUser(data));
-    
-  });
+    if (user?.email) {
+      socket.emit("signUser", user.email);
+    }
+  }, [user?.email]);
+
+  // Fetch unread count on mount and when user changes
+  useEffect(() => {
+    if (user?.email) {
+      dispatch(fetchUnreadCount());
+    }
+  }, [user?.email, dispatch]);
+
+  // Socket listeners
+  useEffect(() => {
+    const handleUserData = (data) => {
+      dispatch(refreshUser(data));
+    };
+
+    const handleNewMessage = (data) => {
+      dispatch(receiveMessage(data.message));
+      dispatch(fetchUnreadCount());
+      dispatch(fetchConversations());
+    };
+
+    const handleOnline = ({ email }) => {
+      dispatch(setOnlineStatus(email, true));
+    };
+
+    const handleOffline = ({ email }) => {
+      dispatch(setOnlineStatus(email, false));
+    };
+
+    socket.on('user', handleUserData);
+    socket.on('newMessage', handleNewMessage);
+    socket.on('userOnline', handleOnline);
+    socket.on('userOffline', handleOffline);
+
+    return () => {
+      socket.off('user', handleUserData);
+      socket.off('newMessage', handleNewMessage);
+      socket.off('userOnline', handleOnline);
+      socket.off('userOffline', handleOffline);
+    };
+  }, [dispatch]);
 
   
   const handleOpenNot = (event) => {
@@ -169,6 +212,15 @@ function NavBar({setDark, dark}) {
             <IconButton
               size="large"
               color="inherit"
+              onClick={() => setChatOpen(true)}
+            >
+              <Badge badgeContent={totalUnreadCount} color="error">
+                <ChatIcon />
+              </Badge>
+            </IconButton>
+            <IconButton
+              size="large"
+              color="inherit"
               onClick={handleOpenNot}
             >
               <Badge badgeContent={user?.requests?.length} color="error">
@@ -240,6 +292,7 @@ function NavBar({setDark, dark}) {
 
         </Toolbar>
      </Container>
+     <ChatDrawer open={chatOpen} onClose={() => setChatOpen(false)} />
     </AppBar>
   );
 }

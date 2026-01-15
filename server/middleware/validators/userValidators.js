@@ -97,7 +97,7 @@ const resetPasswordValidation = [
 ];
 
 const addFriendValidation = [
-    body('email')
+    body('friendEmail')
         .trim()
         .notEmpty().withMessage('Email is required')
         .isEmail().withMessage('Invalid email format')
@@ -106,7 +106,7 @@ const addFriendValidation = [
 ];
 
 const removeFriendValidation = [
-    body('email')
+    body('friendEmail')
         .trim()
         .notEmpty().withMessage('Email is required')
         .isEmail().withMessage('Invalid email format')
